@@ -8,9 +8,14 @@ dependencies = [
     "aiohttp>=3.12.15",
     "ddgs>=9.6.0",
     "duckduckgo-search>=8.1.1",
+    "google-generativeai>=0.8.0",
     "httpx>=0.28.1",
+    "openai>=1.0.0",
+    "pydantic>=2.0.0",
+    "pydantic-ai>=0.0.14",
     "selectolax>=0.4.0",
     "snscrape>=0.7.0.20230622",
+    "streamlit>=1.28.0",
 ]
 
 [build-system]

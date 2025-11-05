@@ -1,13 +1,15 @@
-# Scoutly
+# Scoutly - OSS Deep Researcher
 
-A fast and efficient web scraping tool that searches for queries using DuckDuckGo and extracts text content from the resulting web pages.
+An open-source deep research tool that searches for queries using DuckDuckGo, scrapes and parses text content from web pages, and provides AI-powered analysis and summarization.
 
 ## Features
 
 - **Asynchronous Search**: Concurrently search multiple queries using DuckDuckGo.
-- **Web Scraping**: Extract clean text content from search result URLs.
+- **Web Scraping & Parsing**: Extract clean text content from search result URLs using Pydantic models.
+- **AI Analysis**: Separate AI module for deep analysis and summarization of scraped content.
+- **Streamlit UI**: User-friendly web interface for interactive research.
 - **Fast Processing**: Utilizes async HTTP requests and HTML parsing for speed.
-- **Simple Output**: Saves scraped content to organized text files.
+- **Data Validation**: Uses Pydantic for robust data modeling.
 
 ## Installation
 
@@ -19,34 +21,51 @@ A fast and efficient web scraping tool that searches for queries using DuckDuckG
 ### Setup
 
 1. Clone or download the project:
-   ```bash
-   git clone <repository-url>
-   cd scoutly
-   ```
+    ```bash
+    git clone <repository-url>
+    cd scoutly
+    ```
 
 2. Install dependencies using uv:
-   ```bash
-   uv sync
-   ```
+    ```bash
+    uv sync
+    ```
 
 3. (Optional) Install the package in development mode:
-   ```bash
-   uv pip install -e .
-   ```
+    ```bash
+    uv pip install -e .
+    ```
+
+4. Set up API keys (optional, for Gemini and OpenRouter):
+    ```bash
+    export GEMINI_API_KEY="your-gemini-api-key"
+    export OPENROUTER_API_KEY="your-openrouter-api-key"
+    ```
+    For Ollama, ensure Ollama is running locally with llama3.2 model.
 
 ## Usage
 
-### Running the Script
+### Running the CLI Script
 
-Execute the main script to perform a search and scrape:
+Execute the main script to perform a search, scrape, and analyze:
 
 ```bash
 uv run python main.py
 ```
 
-This will search for predefined queries about the "Asia Cup trophy controversy" and save the scraped text to the `scraped/` directory.
+This will search for predefined queries about the "Asia Cup trophy controversy", scrape content, and display a summary.
 
-### Custom Queries
+### Running the Streamlit UI
+
+Launch the interactive web interface:
+
+```bash
+uv run streamlit run app.py
+```
+
+Enter your research queries in the text area and click "Research" to get search results, scraped content, and AI-generated summaries.
+
+### Custom Queries (CLI)
 
 Modify the `query` list in `main.py` to search for your own topics:
 
@@ -59,24 +78,25 @@ query = [
 
 ### Output
 
-Scraped content is saved in the `scraped/` directory as `.txt` files, named after the page titles (sanitized for filesystem compatibility).
+- **CLI**: Prints summary to console.
+- **UI**: Displays summary and expandable scraped content in the browser.
 
 ## Project Structure
 
 ```
 scoutly/
-├── src/
-│   └── scoutly/
-│       ├── __init__.py
-│       └── utils/
-│           ├── scraper.py    # Web scraping functionality
-│           └── search.py     # DuckDuckGo search integration
-├── tests/                   # Test files (future)
-├── main.py                  # Main entry point
-├── pyproject.toml           # Project configuration
-├── uv.lock                  # Dependency lock file
-├── README.md                # This file
-└── .gitignore               # Git ignore rules
+├── utils/
+│   ├── models.py      # Pydantic data models
+│   ├── scraper.py     # Web scraping and parsing functionality
+│   ├── search.py      # DuckDuckGo search integration
+│   └── ai.py          # AI analysis and summarization
+├── tests/             # Test files (future)
+├── main.py            # CLI entry point
+├── app.py             # Streamlit UI entry point
+├── pyproject.toml     # Project configuration
+├── uv.lock            # Dependency lock file
+├── README.md          # This file
+└── .gitignore         # Git ignore rules
 ```
 
 ## Dependencies
@@ -84,6 +104,8 @@ scoutly/
 - `ddgs`: DuckDuckGo search API
 - `httpx`: Asynchronous HTTP client
 - `selectolax`: Fast HTML parsing
+- `pydantic`: Data validation and modeling
+- `streamlit`: Web UI framework
 - `aiohttp`: Additional async HTTP support
 - `duckduckgo-search`: Alternative search client
 - `snscrape`: Social media scraping (not currently used)

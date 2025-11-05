@@ -2,17 +2,19 @@ import os
 import time
 import httpx
 import asyncio
+from typing import Optional
 from selectolax.parser import HTMLParser
+from .models import SearchResult, ScrapedContent
 
 
-async def fetch_html(url: str, session: httpx.AsyncClient) -> str:
+async def fetch_html(url: str, session: httpx.AsyncClient) -> Optional[str]:
     """Fetch raw HTML from a single URL using httpx."""
     try:
         response = await session.get(url, headers={"User-Agent": "Mozilla/5.0"})
         response.raise_for_status()
         return response.text
     except Exception:
-        pass
+        return None
 
 
 def extract_text(html: str) -> str:
@@ -22,7 +24,7 @@ def extract_text(html: str) -> str:
     return " ".join(paragraphs)
 
 
-async def scrape_urls(urls: list[str]) -> dict[str, str]:
+async def scrape_urls(urls: list[str]) -> dict[str, Optional[str]]:
     """Fetch and parse multiple URLs concurrently using httpx."""
     results = {}
     async with httpx.AsyncClient(timeout=15, follow_redirects=True) as session:
@@ -36,27 +38,19 @@ async def scrape_urls(urls: list[str]) -> dict[str, str]:
     return results
 
 
-async def use_scraper(searchResults: list[dict[str, str]]) -> None:
-    os.makedirs("scraped", exist_ok=True)
-    urls = [result["href"] for result in searchResults]
+async def use_scraper(searchResults: list[SearchResult]) -> list[ScrapedContent]:
+    scraped_contents = []
+    urls = [result.href for result in searchResults]
     texts = await scrape_urls(urls)
     for url, text in texts.items():
-        # Find the corresponding search result
-        matching_result = next((r for r in searchResults if r["href"] == url), None)
-        if matching_result:
-            title = matching_result["title"]
-            # Sanitize filename
-            safe_title = (
-                title.replace("/", "_")
-                .replace("\\", "_")
-                .replace(":", "_")
-                .replace("*", "_")
-                .replace("?", "_")
-                .replace('"', "_")
-                .replace("<", "_")
-                .replace(">", "_")
-                .replace("|", "_")
-            )
-            filename = f"scraped/{safe_title[:10]}.txt"
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(f"{title}\n\n{text}")
+        if text:
+            # Find the corresponding search result
+            matching_result = next((r for r in searchResults if r.href == url), None)
+            if matching_result:
+                scraped_content = ScrapedContent(
+                    url=url,
+                    title=matching_result.title,
+                    content=text
+                )
+                scraped_contents.append(scraped_content)
+    return scraped_contents
