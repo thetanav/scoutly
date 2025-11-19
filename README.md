@@ -1,15 +1,23 @@
-# Scoutly - OSS Deep Researcher
+# Deep Research - AI-Powered Research Assistant
 
-An open-source deep research tool that searches for queries using DuckDuckGo, scrapes and parses text content from web pages, and provides AI-powered analysis and summarization.
+An open-source research tool that analyzes user questions, automatically extracts search keywords, finds relevant information online, and provides comprehensive AI-generated answers.
 
 ## Features
 
-- **Asynchronous Search**: Concurrently search multiple queries using DuckDuckGo.
-- **Web Scraping & Parsing**: Extract clean text content from search result URLs using Pydantic models.
-- **AI Analysis**: Separate AI module for deep analysis and summarization of scraped content.
-- **Streamlit UI**: User-friendly web interface for interactive research.
-- **Fast Processing**: Utilizes async HTTP requests and HTML parsing for speed.
-- **Data Validation**: Uses Pydantic for robust data modeling.
+- **Automatic Keyword Extraction**: AI analyzes user questions to extract optimal search terms
+- **Asynchronous Search**: Concurrently search extracted keywords using DuckDuckGo
+- **Web Scraping & File Storage**: Extract clean text content from search results and save to organized files (500 chars each)
+- **AI Information Extraction**: Uses Gemini Flash 2.0 lite to extract important information (200 words) from scraped files
+- **AI Response Generation**: Uses Google Flash 2.5 to provide detailed answers based on extracted information
+- **Terminal Interface**: Simple command-line interface for research queries
+- **Fast Processing**: Utilizes async HTTP requests and HTML parsing for speed
+
+## Flow
+
+1. **Keyword Extraction**: AI analyzes the user's question to extract relevant search keywords
+2. **Scraper**: Searches for the keywords and scrapes content to a unique folder with text files (500 chars each)
+3. **AI Finder**: Extracts important information related to the keywords from all files in the folder (200 words)
+4. **AI Main**: Responds to the user's original question using the extracted important information
 
 ## Installation
 
@@ -21,27 +29,30 @@ An open-source deep research tool that searches for queries using DuckDuckGo, sc
 ### Setup
 
 1. Clone or download the project:
-    ```bash
-    git clone <repository-url>
-    cd scoutly
-    ```
+
+   ```bash
+   git clone <repository-url>
+   cd scoutly
+   ```
 
 2. Install dependencies using uv:
-    ```bash
-    uv sync
-    ```
+
+   ```bash
+   uv sync
+   ```
 
 3. (Optional) Install the package in development mode:
-    ```bash
-    uv pip install -e .
-    ```
+
+   ```bash
+   uv pip install -e .
+   ```
 
 4. Set up API keys (optional, for Gemini and OpenRouter):
-    ```bash
-    export GEMINI_API_KEY="your-gemini-api-key"
-    export OPENROUTER_API_KEY="your-openrouter-api-key"
-    ```
-    For Ollama, ensure Ollama is running locally with llama3.2 model.
+   ```bash
+   export GEMINI_API_KEY="your-gemini-api-key"
+   export OPENROUTER_API_KEY="your-openrouter-api-key"
+   ```
+   For Ollama, ensure Ollama is running locally with llama3.2 model.
 
 ## Usage
 
@@ -53,46 +64,40 @@ Execute the main script to perform a search, scrape, and analyze:
 uv run python main.py
 ```
 
-This will search for predefined queries about the "Asia Cup trophy controversy", scrape content, and display a summary.
+## Usage
 
-### Running the Streamlit UI
-
-Launch the interactive web interface:
+Run the application:
 
 ```bash
-uv run streamlit run app.py
+uv run python main.py
 ```
 
-Enter your research queries in the text area and click "Research" to get search results, scraped content, and AI-generated summaries.
+Enter your research question. The AI will automatically extract search keywords, find relevant information, and provide a comprehensive answer.
 
-### Custom Queries (CLI)
+### Example
 
-Modify the `query` list in `main.py` to search for your own topics:
-
-```python
-query = [
-    "your search query here",
-    "another query",
-]
+```
+Enter your research question: What happened with the Asia Cup trophy controversy?
 ```
 
-### Output
+The app will:
 
-- **CLI**: Prints summary to console.
-- **UI**: Displays summary and expandable scraped content in the browser.
+1. Extract search keywords from your question (e.g., "Asia Cup trophy controversy")
+2. Search for information using DuckDuckGo
+3. Scrape content from search results and save to files
+4. Extract important information using AI
+5. Generate a detailed response to your question
 
 ## Project Structure
 
 ```
 scoutly/
 ├── utils/
-│   ├── models.py      # Pydantic data models
-│   ├── scraper.py     # Web scraping and parsing functionality
+│   ├── scraper.py     # Web scraping and file saving functionality
 │   ├── search.py      # DuckDuckGo search integration
-│   └── ai.py          # AI analysis and summarization
-├── tests/             # Test files (future)
+│   └── ai.py          # AI information extraction and response generation
+├── scraped/           # Generated folders with scraped content
 ├── main.py            # CLI entry point
-├── app.py             # Streamlit UI entry point
 ├── pyproject.toml     # Project configuration
 ├── uv.lock            # Dependency lock file
 ├── README.md          # This file
@@ -104,8 +109,7 @@ scoutly/
 - `ddgs`: DuckDuckGo search API
 - `httpx`: Asynchronous HTTP client
 - `selectolax`: Fast HTML parsing
-- `pydantic`: Data validation and modeling
-- `streamlit`: Web UI framework
+- `google-generativeai`: Google Gemini AI models
 - `aiohttp`: Additional async HTTP support
 - `duckduckgo-search`: Alternative search client
 - `snscrape`: Social media scraping (not currently used)
