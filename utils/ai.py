@@ -166,13 +166,13 @@ async def ai_main(vectorstore: FAISS, user_prompt: str) -> str:
     context = "\n\n".join([doc.page_content for doc in relevant_docs])
 
     # Create prompt with context
-    full_prompt = f"""You are an answer engine that provides accurate, well-reasoned, and practical responses. 
-        Use the provided context to ground your answer, but do not mention the context directly. 
-        If the answer is uncertain, acknowledge briefly and provide the most likely correct information. 
-        Organize your response for readability using sections or bullet points when helpful. 
-        Prioritize: factual correctness, efficiency, and actionable advice. 
-        Avoid asking follow-up questions. 
-        Avoid phrases that weaken confidence (e.g., "this might help" -> "do this for better results"). 
+    full_prompt = f"""You are an answer engine that provides accurate, well-reasoned, and practical responses.
+        Use the provided context to ground your answer, but do not mention the context directly.
+        If the answer is uncertain, acknowledge briefly and provide the most likely correct information.
+        Organize your response for readability using sections or bullet points when helpful.
+        Prioritize: factual correctness, efficiency, and actionable advice.
+        Avoid asking follow-up questions.
+        Avoid phrases that weaken confidence (e.g., "this might help" -> "do this for better results").
         Keep the tone direct, clear, and concise.
 
         Based on the following information:
@@ -187,3 +187,39 @@ async def ai_main(vectorstore: FAISS, user_prompt: str) -> str:
         return response
     except Exception as e:
         return f"RAG failed: {str(e)}"
+
+
+def ai_stream_response(vectorstore: FAISS, user_prompt: str):
+    """Generate streaming response using Gemma 3."""
+
+    # Retrieve relevant documents (sync for simplicity, assuming vectorstore is ready)
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+    # Since retriever.ainvoke is async, but for streamlit, we'll make it sync
+    # Actually, FAISS retriever has invoke method too
+    relevant_docs = retriever.invoke(user_prompt)
+
+    # Combine the content
+    context = "\n\n".join([doc.page_content for doc in relevant_docs])
+
+    # Create prompt with context
+    full_prompt = f"""You are an answer engine that provides accurate, well-reasoned, and practical responses.
+        Use the provided context to ground your answer, but do not mention the context directly.
+        If the answer is uncertain, acknowledge briefly and provide the most likely correct information.
+        Organize your response for readability using sections or bullet points when helpful.
+        Prioritize: factual correctness, efficiency, and actionable advice.
+        Avoid asking follow-up questions.
+        Avoid phrases that weaken confidence (e.g., "this might help" -> "do this for better results").
+        Keep the tone direct, clear, and concise.
+
+        Based on the following information:
+
+        {context}
+
+        Answer the user's question: {user_prompt}
+        """
+
+    try:
+        for chunk in llm.stream(full_prompt):
+            yield chunk
+    except Exception as e:
+        yield f"RAG failed: {str(e)}"

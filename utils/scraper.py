@@ -1,14 +1,9 @@
 import os
-import time
 import httpx
 import asyncio
-import logging
 from typing import Optional
 from selectolax.parser import HTMLParser
 import uuid
-
-# Disable httpx logging
-logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 async def fetch_html(url: str, session: httpx.AsyncClient) -> Optional[str]:
