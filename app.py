@@ -3,8 +3,20 @@ import streamlit as st
 from utils.scraper import use_scraper
 from utils.search import use_search
 from utils.ai import extract_search_keywords, ai_finder, ai_stream_response
+import base64
 
-st.title("Scoutly Research Assistant")
+
+def get_base64(file_path):
+    with open(file_path, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
+
+img_b64 = get_base64("public/tech.png")
+
+st.markdown(
+    f'<span style="font-size:2em; font-weight:bold;">Scoutly Research Assistant & RAG</span> <img src="data:image/png;base64,{img_b64}" width="100" style="vertical-align:middle; margin-right:20px;"> ',
+    unsafe_allow_html=True,
+)
 
 # Initialize chat history
 if "messages" not in st.session_state:
