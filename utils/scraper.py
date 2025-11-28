@@ -2,9 +2,13 @@ import os
 import time
 import httpx
 import asyncio
+import logging
 from typing import Optional
 from selectolax.parser import HTMLParser
 import uuid
+
+# Disable httpx logging
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 async def fetch_html(url: str, session: httpx.AsyncClient) -> Optional[str]:
@@ -33,7 +37,7 @@ async def scrape_urls(urls: list[str]) -> dict[str, Optional[str]]:
 
         for url, html in zip(urls, html_pages):
             if html:
-                results[url] = extract_text(html)[:1000]  # Limit to 500 chars
+                results[url] = extract_text(html)  # Limit to 500 chars
 
     return results
 
@@ -42,15 +46,24 @@ async def use_scraper(search_results: list[dict]) -> str:
     """Scrape URLs and save to files in a unique folder."""
     folder_name = f"scraped/{uuid.uuid4().hex[:8]}"
     os.makedirs(folder_name, exist_ok=True)
-    
-    urls = [result['href'] for result in search_results]
+
+    urls = [result["href"] for result in search_results]
+
+    print(f"📋 Found {len(urls)} pages to scrape:")
+    for i, url in enumerate(urls, 1):
+        print(f"  {i}. {url}")
+
+    print("⏳ Scraping content...")
     texts = await scrape_urls(urls)
-    
+
+    successful_scrapes = 0
     for i, (url, text) in enumerate(texts.items()):
         if text:
-            filename = f"{i+1}.txt"
+            successful_scrapes += 1
+            filename = f"{i + 1}.txt"
             filepath = os.path.join(folder_name, filename)
-            with open(filepath, 'w', encoding='utf-8') as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 f.write(text)
-    
+
+    print(f"✅ Successfully scraped {successful_scrapes}/{len(urls)} pages")
     return folder_name

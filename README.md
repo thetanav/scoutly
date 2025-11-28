@@ -1,30 +1,37 @@
-# Deep Research - AI-Powered Research Assistant
+# Scoutly - AI-Powered Research Assistant with RAG
 
-An open-source research tool that analyzes user questions, automatically extracts search keywords, finds relevant information online, and provides comprehensive AI-generated answers.
+An open-source research tool that analyzes user questions, automatically extracts search keywords, finds relevant information online, and provides comprehensive AI-generated answers using Retrieval-Augmented Generation (RAG) with Docling document processing and Ollama Gemma models.
 
 ## Features
 
-- **Automatic Keyword Extraction**: AI analyzes user questions to extract optimal search terms
+- **Automatic Keyword Extraction**: AI analyzes user questions to extract optimal search terms using Gemma 3
 - **Asynchronous Search**: Concurrently search extracted keywords using DuckDuckGo
-- **Web Scraping & File Storage**: Extract clean text content from search results and save to organized files (500 chars each)
-- **AI Information Extraction**: Uses Gemini Flash 2.0 lite to extract important information (200 words) from scraped files
-- **AI Response Generation**: Uses Google Flash 2.5 to provide detailed answers based on extracted information
+- **Web Scraping & File Storage**: Extract clean text content from search results and save to organized files
+- **Document Processing**: Uses Docling to process and chunk scraped text documents
+- **RAG System**:
+  - Creates embeddings using Gemma embedding model via Ollama
+  - Stores document chunks in FAISS vector database
+  - Retrieves relevant information for user queries
+- **AI Response Generation**: Uses Gemma 3 model via Ollama to provide detailed answers based on retrieved context
 - **Terminal Interface**: Simple command-line interface for research queries
 - **Fast Processing**: Utilizes async HTTP requests and HTML parsing for speed
 
 ## Flow
 
-1. **Keyword Extraction**: AI analyzes the user's question to extract relevant search keywords
-2. **Scraper**: Searches for the keywords and scrapes content to a unique folder with text files (500 chars each)
-3. **AI Finder**: Extracts important information related to the keywords from all files in the folder (200 words)
-4. **AI Main**: Responds to the user's original question using the extracted important information
+1. **Keyword Extraction**: Gemma 3 analyzes the user's question to extract relevant search keywords
+2. **Scraper**: Searches for the keywords and scrapes content to a unique folder with text files
+3. **Document Processing & Embedding**: Docling processes text files, chunks them, and creates embeddings using Gemma embedding model
+4. **Vector Storage**: Stores embedded chunks in FAISS vector database
+5. **Retrieval**: For user queries, retrieves most relevant document chunks
+6. **Generation**: Gemma 3 generates comprehensive answers based on retrieved context
 
 ## Installation
 
 ### Prerequisites
 
 - Python 3.13 or higher
-- uv package manager
+- Ollama installed and running
+- Gemma models: `embeddinggemma:latest` and `gemma3:1b` (run `ollama pull embeddinggemma:latest` and `ollama pull gemma3:1b`)
 
 ### Setup
 
@@ -35,24 +42,28 @@ An open-source research tool that analyzes user questions, automatically extract
    cd scoutly
    ```
 
-2. Install dependencies using uv:
+2. Install dependencies:
 
    ```bash
-   uv sync
+   pip install -e .
    ```
 
-3. (Optional) Install the package in development mode:
+3. Install Ollama and pull required models:
 
    ```bash
-   uv pip install -e .
+   # Install Ollama (if not already installed)
+   curl -fsSL https://ollama.ai/install.sh | sh
+
+   # Pull required models
+   ollama pull embeddinggemma:latest
+   ollama pull gemma3:1b
    ```
 
-4. Set up API keys (optional, for Gemini and OpenRouter):
+4. Start Ollama service:
+
    ```bash
-   export GEMINI_API_KEY="your-gemini-api-key"
-   export OPENROUTER_API_KEY="your-openrouter-api-key"
+   ollama serve
    ```
-   For Ollama, ensure Ollama is running locally with llama3.2 model.
 
 ## Usage
 
@@ -61,32 +72,65 @@ An open-source research tool that analyzes user questions, automatically extract
 Execute the main script to perform a search, scrape, and analyze:
 
 ```bash
-uv run python main.py
+python main.py
 ```
 
-## Usage
-
-Run the application:
-
-```bash
-uv run python main.py
-```
-
-Enter your research question. The AI will automatically extract search keywords, find relevant information, and provide a comprehensive answer.
+Enter your research question. The AI will automatically extract search keywords, find relevant information, and provide a comprehensive answer using RAG.
 
 ### Example
 
 ```
-Enter your research question: What happened with the Asia Cup trophy controversy?
+Enter your research question: What is machine learning?
 ```
 
 The app will:
 
-1. Extract search keywords from your question (e.g., "Asia Cup trophy controversy")
-2. Search for information using DuckDuckGo
-3. Scrape content from search results and save to files
-4. Extract important information using AI
-5. Generate a detailed response to your question
+1. Extract keywords: "machine learning", "artificial intelligence", "algorithms", "data science"
+2. Search and scrape relevant web content
+3. Process documents with Docling and create embeddings
+4. Build FAISS vector store
+5. Retrieve relevant information and generate response using Gemma 3
+
+### Output
+
+```
+Extracting search keywords...
+Using keywords: machine learning, artificial intelligence, algorithms, data science
+Searching for information...
+Scraping content...
+Extracting important information...
+Generating response...
+
+Response:
+Machine learning is a subset of artificial intelligence that focuses on algorithms and statistical models that enable computers to perform specific tasks without explicit instructions. It involves training systems on data to recognize patterns and make decisions.
+
+Key aspects include:
+- Supervised learning (labeled data)
+- Unsupervised learning (unlabeled data)
+- Deep learning (neural networks)
+- Applications in image recognition, natural language processing, recommendation systems
+```
+
+## Architecture
+
+- **Keyword Extraction**: Gemma 3 model analyzes user queries
+- **Search & Scraping**: DuckDuckGo search with async web scraping
+- **Document Processing**: Docling handles various document formats and text chunking
+- **Embeddings**: Gemma embedding model creates vector representations
+- **Vector Storage**: FAISS provides efficient similarity search
+- **Retrieval**: Semantic search finds relevant document chunks
+- **Generation**: Gemma 3 produces context-aware responses
+
+## Dependencies
+
+- `docling`: Document processing and chunking
+- `langchain`: RAG orchestration framework
+- `langchain-ollama`: Ollama integration for LangChain
+- `faiss-cpu`: Vector similarity search
+- `ollama`: Local LLM inference
+- `aiohttp`, `httpx`: Async HTTP requests
+- `selectolax`: HTML parsing
+- `ddgs`: DuckDuckGo search API
 
 ## Project Structure
 
@@ -95,24 +139,13 @@ scoutly/
 ├── utils/
 │   ├── scraper.py     # Web scraping and file saving functionality
 │   ├── search.py      # DuckDuckGo search integration
-│   └── ai.py          # AI information extraction and response generation
+│   └── ai.py          # RAG system with Docling and Ollama Gemma models
 ├── scraped/           # Generated folders with scraped content
 ├── main.py            # CLI entry point
 ├── pyproject.toml     # Project configuration
-├── uv.lock            # Dependency lock file
 ├── README.md          # This file
 └── .gitignore         # Git ignore rules
 ```
-
-## Dependencies
-
-- `ddgs`: DuckDuckGo search API
-- `httpx`: Asynchronous HTTP client
-- `selectolax`: Fast HTML parsing
-- `google-generativeai`: Google Gemini AI models
-- `aiohttp`: Additional async HTTP support
-- `duckduckgo-search`: Alternative search client
-- `snscrape`: Social media scraping (not currently used)
 
 ## Development
 
@@ -120,20 +153,10 @@ scoutly/
 
 ```bash
 # Add tests to tests/ directory and run with:
-uv run pytest
+pytest
 ```
 
-### Code Quality
-
-```bash
-# Lint code (if configured)
-uv run ruff check .
-
-# Format code
-uv run ruff format .
-```
-
-## Contributing
+### Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -143,13 +166,8 @@ uv run ruff format .
 
 ## License
 
-[Add license information here]
+This project is open source. Please check the license file for details.
 
-## TODO
+## Disclaimer
 
-- [x] Support multiple queries
-- [ ] Cache scraped pages to avoid re-fetching
-- [ ] Use request body for ultra-fast scraping
-- [ ] Add configuration file support
-- [ ] Implement retry logic for failed requests
-- [ ] Add logging and progress indicators
+This tool is for research and educational purposes. Respect website terms of service and robots.txt when scraping.

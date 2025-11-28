@@ -16,5 +16,8 @@ async def use_search(queries: list[str]) -> list[dict]:
     # Flatten the list of lists into a single list
     all_results = [item for sublist in results_lists for item in sublist]
     # Convert to dicts
-    search_results = [{'title': r['title'], 'href': r['href'], 'body': r.get('body')} for r in all_results]
+    search_results = [
+        {"title": r["title"], "href": r["href"], "body": r.get("body")}
+        for r in all_results
+    ]
     return search_results

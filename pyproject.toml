@@ -13,6 +13,11 @@ dependencies = [
     "openai>=1.0.0",
     "selectolax>=0.4.0",
     "snscrape>=0.7.0.20230622",
+    "docling>=2.0.0",
+    "langchain>=0.2.0",
+    "langchain-ollama>=0.1.0",
+    "faiss-cpu>=1.7.0",
+    "ollama>=0.3.0",
 ]
 
 [build-system]
