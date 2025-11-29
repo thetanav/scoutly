@@ -1,5 +1,9 @@
 # Scoutly - AI-Powered Research Assistant with RAG
 
+[![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Open Source](https://img.shields.io/badge/open%20source-yes-brightgreen.svg)](https://github.com/thetanav/scoutly)
+
 An open-source research tool that analyzes user questions, automatically extracts search keywords, finds relevant information online, and provides comprehensive AI-generated answers using Retrieval-Augmented Generation (RAG) with Docling document processing and Ollama Gemma models.
 
 ## Features
@@ -110,6 +114,25 @@ Key aspects include:
 - Deep learning (neural networks)
 - Applications in image recognition, natural language processing, recommendation systems
 ```
+
+## Demo
+
+Try the interactive web interface powered by Streamlit:
+
+1. Run the Streamlit app:
+   ```bash
+   streamlit run app.py
+   ```
+
+2. Open your browser to the provided URL (usually http://localhost:8501).
+
+3. Enter your research question in the chat input.
+
+The app will automatically extract keywords, search the web, scrape content, process documents, and generate a response using RAG.
+
+### Screenshots
+
+*(Add screenshots here after running the app)*
 
 ## Architecture
 

@@ -1,9 +1,11 @@
 import asyncio
+import base64
+
 import streamlit as st
+
+from utils.ai import ai_finder, ai_stream_response, extract_search_keywords
 from utils.scraper import use_scraper
 from utils.search import use_search
-from utils.ai import extract_search_keywords, ai_finder, ai_stream_response
-import base64
 
 
 def get_base64(file_path):
@@ -55,10 +57,15 @@ if prompt := st.chat_input("Enter your research question"):
             vectorstore = asyncio.run(ai_finder(folder_name, topic))
             st.write("🧠 Processing completed")
 
-            # Stream response
-            st.write_stream(ai_stream_response(vectorstore, prompt))
+            # Stream response and collect full text
+            response_text = ""
+            response_placeholder = st.empty()
+            for chunk in ai_stream_response(vectorstore, prompt):
+                response_text += chunk
+                response_placeholder.write(response_text)
         except Exception as e:
             st.error(f"Error: {str(e)}")
+            response_text = f"Error: {str(e)}"
 
-    # Add assistant response to chat history (simplified, assuming we can get the full response)
-    # For now, skip adding to history to avoid complexity
+    # Add assistant response to chat history
+    st.session_state.messages.append({"role": "assistant", "content": response_text})

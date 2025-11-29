@@ -1,15 +1,10 @@
 import os
-import asyncio
 from typing import List
-from docling.document_converter import DocumentConverter
-from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
-from langchain_ollama import OllamaEmbeddings, OllamaLLM
-from langchain_community.vectorstores import FAISS
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
 
+from langchain_community.vectorstores import FAISS
+from langchain_core.documents import Document
+from langchain_ollama import OllamaEmbeddings, OllamaLLM
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Initialize embeddings and LLM
 embeddings = OllamaEmbeddings(model="embeddinggemma")
@@ -60,7 +55,7 @@ Answer: climate change polar bears, polar bear habitat, global warming arctic"""
             if final_keywords
             else [" ".join(user_prompt.split()[2:6])]
         )  # Skip question word and get next words
-    except Exception as e:
+    except Exception:
         # Simple fallback: remove question words and take key phrases
         words = user_prompt.lower().replace("?", "").split()
         # Remove question words
@@ -92,7 +87,7 @@ Answer: climate change polar bears, polar bear habitat, global warming arctic"""
             "happened",
         }
         filtered_words = [w for w in words if w not in question_words and len(w) > 2]
-        if len(filtered_words) >= 3:
+        if len(filtered_words) >= 5:
             return [" ".join(filtered_words[:3]), " ".join(filtered_words)]
         else:
             return [" ".join(filtered_words)]
@@ -100,20 +95,6 @@ Answer: climate change polar bears, polar bear habitat, global warming arctic"""
 
 async def ai_finder(folder_name: str, topic: str) -> FAISS:
     """Process scraped text with Docling, create embeddings, and build FAISS vector store."""
-
-    # Initialize Docling converter
-    pipeline_options = PdfPipelineOptions()
-    pipeline_options.do_ocr = False
-    pipeline_options.do_table_structure = True
-
-    doc_converter = DocumentConverter(
-        format_options={
-            InputFormat.PDF: PdfPipelineOptions(
-                do_ocr=False,
-                do_table_structure=True,
-            )
-        }
-    )
 
     all_documents = []
 
