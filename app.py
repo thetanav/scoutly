@@ -42,7 +42,9 @@ if prompt := st.chat_input("Enter your research question"):
         try:
             # Extract keywords
             search_keywords = asyncio.run(extract_search_keywords(prompt))
-            st.write(f"🔍 Using keywords: {', '.join(search_keywords)}")
+            st.write(
+                f"🔍 Using {len(search_keywords)} keywords: {', '.join(search_keywords)}"
+            )
 
             # Search
             search_results = asyncio.run(use_search(search_keywords))
