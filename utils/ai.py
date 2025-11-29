@@ -51,7 +51,7 @@ Answer: climate change polar bears, polar bear habitat, global warming arctic"""
                 final_keywords.append(k)
 
         return (
-            final_keywords[:4]
+            final_keywords[:5]
             if final_keywords
             else [" ".join(user_prompt.split()[2:6])]
         )  # Skip question word and get next words
