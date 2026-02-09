@@ -4,8 +4,7 @@ import base64
 import streamlit as st
 
 from utils.ai import ai_finder, ai_stream_response, extract_search_keywords
-from utils.scraper import use_scraper
-from utils.search import use_search
+from utils.scraper import use_scraper, use_search
 
 
 def get_base64(file_path):
@@ -41,32 +40,32 @@ if prompt := st.chat_input("Enter your research question"):
     with st.chat_message("assistant"):
         try:
             # Extract keywords
-            search_keywords, time = asyncio.run(extract_search_keywords(prompt))
-            st.write(
-                f"🔍 Using {len(search_keywords)} keywords: {', '.join(search_keywords)}"
-            )
+            with st.spinner("🔍 Extracting search keywords..."):
+                search_keywords = asyncio.run(extract_search_keywords(prompt))
 
             # Search
-            search_results = asyncio.run(use_search(search_keywords, time))
-            st.write("🌐 Searching completed")
+            with st.spinner("Searching for information..."):
+                search_results, search_time = asyncio.run(use_search(search_keywords))
 
             # Scrape
-            folder_name = asyncio.run(use_scraper(search_results))
-            st.write("📄 Scraping completed")
+            with st.spinner("Scraping web pages..."):
+                folder_name = asyncio.run(use_scraper(search_results, search_time))
 
             # Process documents
-            topic = " ".join(search_keywords)
-            vectorstore = asyncio.run(ai_finder(folder_name, topic))
-            st.write("🧠 Processing completed")
+            with st.spinner("Building knowledge base..."):
+                topic = " ".join(search_keywords)
+                vectorstore = asyncio.run(ai_finder(folder_name, topic))
 
-            # Stream response and collect full text
             response_text = ""
             response_placeholder = st.empty()
-            for chunk in ai_stream_response(vectorstore, prompt):
-                response_text += chunk
-                response_placeholder.write(response_text)
+
+            with st.spinner("Generating response..."):
+                for chunk in ai_stream_response(vectorstore, prompt):
+                    response_text += chunk
+                    response_placeholder.write(response_text)
+
         except Exception as e:
-            st.error(f"Error: {str(e)}")
+            st.error(f"❌ Error: {str(e)}")
             response_text = f"Error: {str(e)}"
 
     # Add assistant response to chat history

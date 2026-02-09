@@ -1,7 +1,6 @@
 import asyncio
 import time
-from utils.scraper import use_scraper
-from utils.search import use_search
+from utils.scraper import use_scraper, use_search
 from utils.ai import extract_search_keywords, ai_finder, ai_main
 
 
@@ -15,15 +14,27 @@ async def main():
 
     current_time = time.time()
 
+    # Print AI Configuration at startup
+    print("\n" + "=" * 60)
+    print("🤖 SCOUTLY RESEARCH AGENT - AI CONFIGURATION")
+    print("=" * 60)
+    print("📊 AI Models:")
+    print("  • Embedding Model: embeddinggemma")
+    print("  • LLM Model: gemma3:1b")
+    print("  • Vector Store: FAISS")
+    print("  • Search Engine: DuckDuckGo")
+    print("=" * 60 + "\n")
+
     print("🔍 Extracting search keywords...")
     search_keywords = await extract_search_keywords(user_prompt)
     print(f"📝 Using keywords: {', '.join(search_keywords)}")
 
     print("🌐 Searching for information...")
-    search_results = await use_search(search_keywords)
+    search_results, search_time = await use_search(search_keywords)
+    print(f"⏱️  Search completed in {search_time:.2f}s")
 
     print("📄 Scraping content...")
-    folder_name = await use_scraper(search_results)
+    folder_name = await use_scraper(search_results, search_time)
 
     # Use the keywords as topic for AI finder
     topic = " ".join(search_keywords)
@@ -31,10 +42,31 @@ async def main():
     vectorstore = await ai_finder(folder_name, topic)
 
     print("🤖 Generating response...")
-    response = await ai_main(vectorstore, user_prompt)
+    response, sources = await ai_main(vectorstore, user_prompt)
 
-    print(f"\n📄 Response:\n{response}")
-    print(f"\n⏱️  Completed in {time.time() - current_time:.2f} seconds.")
+    print("\n" + "=" * 60)
+    print("📄 RESPONSE")
+    print("=" * 60)
+    print(f"{response}")
+    print("=" * 60)
+
+    print("\n🔗 SOURCE DOCUMENTS:")
+    for i, source in enumerate(sources, 1):
+        print(f"  {i}. {source}")
+
+    print("\n" + "=" * 60)
+    print("🧠 AI METADATA USED")
+    print("=" * 60)
+    print("📊 Configuration:")
+    print("  • Embedding Model: embeddinggemma")
+    print("  • LLM Model: gemma3:1b")
+    print("  • Vector Store: FAISS")
+    print("  • Vector DB Path: Managed in memory")
+    print("  • Chunk Size: 1000 tokens")
+    print("  • Chunk Overlap: 200 tokens")
+    print("  • Retrieval K: 5 documents")
+    print("=" * 60)
+    print(f"\n⏱️  Total Completed in {time.time() - current_time:.2f} seconds.")
 
 
 if __name__ == "__main__":

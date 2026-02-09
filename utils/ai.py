@@ -136,7 +136,7 @@ async def ai_finder(folder_name: str, topic: str) -> FAISS:
     return vectorstore
 
 
-async def ai_main(vectorstore: FAISS, user_prompt: str) -> str:
+async def ai_main(vectorstore: FAISS, user_prompt: str) -> tuple[str, list[str]]:
     """Retrieve relevant information and generate response using Gemma 3."""
 
     # Retrieve relevant documents
@@ -145,6 +145,11 @@ async def ai_main(vectorstore: FAISS, user_prompt: str) -> str:
 
     # Combine the content
     context = "\n\n".join([doc.page_content for doc in relevant_docs])
+
+    # Extract sources
+    sources = list(
+        set([doc.metadata.get("source", "unknown") for doc in relevant_docs])
+    )
 
     # Create prompt with context
     full_prompt = f"""You are an answer engine that provides accurate, well-reasoned, and practical responses.
@@ -165,9 +170,9 @@ async def ai_main(vectorstore: FAISS, user_prompt: str) -> str:
 
     try:
         response = llm.invoke(full_prompt)
-        return response
+        return response, sources
     except Exception as e:
-        return f"RAG failed: {str(e)}"
+        return f"RAG failed: {str(e)}", []
 
 
 def ai_stream_response(vectorstore: FAISS, user_prompt: str):
