@@ -41,13 +41,13 @@ if prompt := st.chat_input("Enter your research question"):
     with st.chat_message("assistant"):
         try:
             # Extract keywords
-            search_keywords = asyncio.run(extract_search_keywords(prompt))
+            search_keywords, time = asyncio.run(extract_search_keywords(prompt))
             st.write(
                 f"🔍 Using {len(search_keywords)} keywords: {', '.join(search_keywords)}"
             )
 
             # Search
-            search_results = asyncio.run(use_search(search_keywords))
+            search_results = asyncio.run(use_search(search_keywords, time))
             st.write("🌐 Searching completed")
 
             # Scrape
