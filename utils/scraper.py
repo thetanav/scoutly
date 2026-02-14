@@ -2,123 +2,21 @@ import os
 import re
 import httpx
 import asyncio
+import trafilatura
 from typing import Optional
-from selectolax.parser import HTMLParser
 import uuid
 import time
 from ddgs import DDGS
 
-# Performance constants
-MAX_CONTENT_LENGTH = 15000  # Max chars per page
-MIN_CONTENT_LENGTH = 200  # Min chars to consider valid
-MAX_HTML_SIZE = 2_000_000  # 2MB max HTML to parse
-
-# Noise selectors - expanded for better noise removal
-NOISE_SELECTORS = """
-script, style, nav, footer, noscript, header, aside, 
-[class*="ad" i], [class*="Ad" i], [id*="ad" i], [id*="Ad" i],
-[class*="cookie" i], [class*="popup" i], [class*="modal" i],
-[class*="sidebar" i], [class*="widget" i], [class*="share" i],
-[class*="social" i], [class*="comment" i], [class*="related" i],
-[class*="newsletter" i], [class*="subscribe" i],
-[role="banner"], [role="complementary"], [role="contentinfo"],
-.ads, .advertisement, .promo, .promotion
-""".replace("\n", " ")
-
-# Content selectors by priority
-CONTENT_SELECTORS = [
-    "article",
-    "main",
-    '[role="main"]',
-    ".content",
-    ".post",
-    ".entry",
-    ".article-body",
-    ".story-body",
-    "#content",
-    "#main",
-]
-
-
-def clean_text(text: str) -> str:
-    """Clean and normalize extracted text."""
-    # Replace multiple whitespace with single space
-    text = re.sub(r"\s+", " ", text)
-    # Remove common encoding artifacts
-    text = re.sub(r"[^\x20-\x7E\s]", "", text)
-    # Remove URLs
-    text = re.sub(
-        r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+",
-        "",
-        text,
-    )
-    # Clean up multiple spaces again
-    text = re.sub(r"\s{2,}", " ", text)
-    return text.strip()
+HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; AI-scraper/1.0)"}
 
 
 def extract_text(html: str) -> str:
-    """Extract clean text from HTML using selectolax. Optimized for speed and quality."""
+    """Extract clean text from HTML using trafilatura."""
     try:
-        # Early truncation for very large HTML
-        if len(html) > MAX_HTML_SIZE:
-            html = html[:MAX_HTML_SIZE]
-
-        tree = HTMLParser(html)
-
-        # Fast removal of all noise elements
-        for node in tree.css(NOISE_SELECTORS):
-            node.decompose()
-
-        text_parts = []
-        extracted = False
-
-        # Strategy 1: Try content selectors by priority
-        for selector in CONTENT_SELECTORS:
-            content = tree.css_first(selector)
-            if content:
-                text = content.text(separator=" ", strip=True)
-                if text and len(text) > 100:
-                    text_parts.append(clean_text(text))
-                    extracted = True
-                    break
-
-        # Strategy 2: If no main content found, collect good paragraphs
-        if not extracted:
-            seen_texts = set()
-            for p in tree.css("p, h1, h2, h3, h4, li"):
-                text = p.text(strip=True)
-                if text and len(text) > 20 and text not in seen_texts:
-                    # Check if it looks like good content (not navigation)
-                    parent = p.parent
-                    if parent and not any(
-                        cls in (parent.attributes.get("class", "") or "").lower()
-                        for cls in ["menu", "nav", "breadcrumb", "tag"]
-                    ):
-                        text_parts.append(clean_text(text))
-                        seen_texts.add(text)
-
-        # Strategy 3: Fallback to body text if still nothing good
-        if not text_parts:
-            body = tree.css_first("body")
-            if body:
-                text = body.text(separator=" ", strip=True)
-                if text:
-                    text_parts.append(clean_text(text))
-
-        combined = " ".join(text_parts)
-
-        # Apply length limits
-        if len(combined) > MAX_CONTENT_LENGTH:
-            # Try to find a good break point
-            break_point = combined.rfind(".", 0, MAX_CONTENT_LENGTH)
-            if break_point < MAX_CONTENT_LENGTH * 0.8:  # If too short, just cut
-                break_point = MAX_CONTENT_LENGTH
-            combined = combined[: break_point + 1]
-
-        return combined if len(combined) >= MIN_CONTENT_LENGTH else ""
-
-    except Exception as e:
+        text = trafilatura.extract(html, output_format="markdown")
+        return text if text else ""
+    except Exception:
         return ""
 
 

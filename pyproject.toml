@@ -13,4 +13,5 @@ dependencies = [
     "langchain-ollama>=1.0.1",
     "langchain-text-splitters>=1.1.0",
     "selectolax>=0.4.6",
+    "trafilatura>=2.0.0",
 ]
