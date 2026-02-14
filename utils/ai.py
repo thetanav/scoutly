@@ -5,6 +5,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_ollama import OllamaEmbeddings, OllamaLLM
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pypdf import PdfReader
 
 # Initialize embeddings and LLM
 embeddings = OllamaEmbeddings(model="embeddinggemma")
@@ -208,29 +209,67 @@ REFINED_QUERY: if not sufficient, a better search query to find missing informat
 
 
 async def ai_finder(folder_name: str, topic: str) -> FAISS:
-    """Process scraped text with Docling, create embeddings, and build FAISS vector store."""
+    """Process scraped text and PDFs, create embeddings, and build FAISS vector store."""
 
     all_documents = []
 
-    # Process each text file in the folder
+    # Load source URL mapping from SOURCES.md
+    source_map = {}
+    sources_path = os.path.join(folder_name, "SOURCES.md")
+    if os.path.exists(sources_path):
+        with open(sources_path, "r", encoding="utf-8") as f:
+            current_file = None
+            current_url = None
+            for line in f:
+                line = line.strip()
+                if line.startswith("- URL: "):
+                    current_url = line.split("- URL: ")[1].strip()
+                elif line.startswith("- File: "):
+                    current_file = line.split("- File: ")[1].strip()
+                    # File always comes after URL, so save the pair
+                    if current_url:
+                        source_map[current_file] = current_url
+                    current_file = None
+                    current_url = None
+
+    # Process each file in the folder
     for filename in os.listdir(folder_name):
+        filepath = os.path.join(folder_name, filename)
+        source_url = source_map.get(filename, filename)
+
         if filename.endswith(".txt"):
-            filepath = os.path.join(folder_name, filename)
             try:
-                # Read the text file
                 with open(filepath, "r", encoding="utf-8") as f:
                     content = f.read()
-
-                # Create a Document object
-                doc = Document(page_content=content, metadata={"source": filename})
-                all_documents.append(doc)
-
+                if content.strip():
+                    doc = Document(
+                        page_content=content,
+                        metadata={"source": source_url, "file": filename},
+                    )
+                    all_documents.append(doc)
             except Exception as e:
                 print(f" ! Error processing {filename}: {e}")
                 continue
 
+        elif filename.endswith(".pdf"):
+            try:
+                reader = PdfReader(filepath)
+                pdf_text = ""
+                for page in reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        pdf_text += page_text + "\n"
+                if pdf_text.strip():
+                    doc = Document(
+                        page_content=pdf_text,
+                        metadata={"source": source_url, "file": filename},
+                    )
+                    all_documents.append(doc)
+            except Exception as e:
+                print(f" ! Error processing PDF {filename}: {e}")
+                continue
+
     if not all_documents:
-        # Fallback: create a dummy document
         all_documents = [
             Document(page_content="No content found", metadata={"source": "fallback"})
         ]
@@ -290,16 +329,18 @@ async def ai_main(vectorstore: FAISS, user_prompt: str) -> tuple[str, list[str]]
 
 
 def ai_stream_response(vectorstore: FAISS, user_prompt: str):
-    """Generate streaming response using Gemma 3."""
+    """Generate streaming response with source attribution."""
 
-    # Retrieve relevant documents (sync for simplicity, assuming vectorstore is ready)
     retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-    # Since retriever.ainvoke is async, but for streamlit, we'll make it sync
-    # Actually, FAISS retriever has invoke method too
     relevant_docs = retriever.invoke(user_prompt)
 
     # Combine the content
     context = "\n\n".join([doc.page_content for doc in relevant_docs])
+
+    # Collect unique source URLs
+    sources = list(
+        dict.fromkeys(doc.metadata.get("source", "unknown") for doc in relevant_docs)
+    )
 
     # Create prompt with context
     full_prompt = f"""You are an answer engine that provides accurate, well-reasoned, and practical responses.
@@ -321,5 +362,14 @@ def ai_stream_response(vectorstore: FAISS, user_prompt: str):
     try:
         for chunk in llm.stream(full_prompt):
             yield chunk
+
+        # Append sources at the end
+        yield "\n\n---\n**Sources:**\n"
+        for i, src in enumerate(sources, 1):
+            if src.startswith("http"):
+                yield f"{i}. [{src}]({src})\n"
+            else:
+                yield f"{i}. {src}\n"
+
     except Exception as e:
         yield f"RAG failed: {str(e)}"

@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "ddgs>=9.10.0",
-    "docling>=2.73.1",
     "faiss-cpu>=1.13.2",
     "langchain>=1.2.9",
     "langchain-community>=0.4.1",
@@ -15,5 +14,6 @@ dependencies = [
     "langchain-text-splitters>=1.1.0",
     "pypdf>=6.7.0",
     "selectolax>=0.4.6",
+    "streamlit>=1.54.0",
     "trafilatura>=2.0.0",
 ]

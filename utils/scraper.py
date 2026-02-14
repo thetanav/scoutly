@@ -10,6 +10,54 @@ from ddgs import DDGS
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; AI-scraper/1.0)"}
 
 
+def write_sources(folder_name: str, sources: list[dict]) -> None:
+    """Write SOURCES.md with all source URLs and titles."""
+    filepath = os.path.join(folder_name, "SOURCES.md")
+
+    # Load existing sources if file exists
+    existing = []
+    if os.path.exists(filepath):
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+        # Parse existing entries to avoid duplicates
+        for line in content.split("\n"):
+            if line.startswith("- URL: "):
+                existing.append(line.split("- URL: ")[1].strip())
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write("# Sources\n\n")
+        f.write(f"_Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}_\n\n")
+
+        seen_urls = set(existing)
+        idx = 1
+
+        # Write existing first
+        for url in existing:
+            f.write(f"## Source {idx}\n")
+            f.write(f"- URL: {url}\n\n")
+            idx += 1
+
+        # Write new sources
+        for source in sources:
+            url = source.get("url", "")
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+
+            title = source.get("title", "Unknown")
+            file_ref = source.get("file", "")
+            source_type = source.get("type", "webpage")
+
+            f.write(f"## Source {idx}\n")
+            f.write(f"- Title: {title}\n")
+            f.write(f"- URL: {url}\n")
+            f.write(f"- Type: {source_type}\n")
+            if file_ref:
+                f.write(f"- File: {file_ref}\n")
+            f.write("\n")
+            idx += 1
+
+
 async def download_pdf(url: str, folder_name: str, index: int) -> bool:
     """Download a PDF file to the folder."""
     try:
@@ -131,6 +179,7 @@ async def use_scraper(
     os.makedirs(folder_name, exist_ok=True)
 
     urls = [result["href"] for result in search_results]
+    titles = {result["href"]: result.get("title", "") for result in search_results}
 
     print(f"\n📋 Found {len(urls)} pages in {st:.2f}s:")
     for i, url in enumerate(urls, 1):
@@ -141,9 +190,10 @@ async def use_scraper(
     print("⏳ Fetching and parsing pages...")
     texts = await scrape_urls(urls)
 
-    # Write files
+    # Write files and track sources
     successful_scrapes = 0
     failed_scrapes = 0
+    sources = []
 
     for i, (url, text) in enumerate(texts.items(), start_index):
         if text:
@@ -152,10 +202,21 @@ async def use_scraper(
             try:
                 with open(filepath, "w", encoding="utf-8") as f:
                     f.write(text)
+                sources.append(
+                    {
+                        "url": url,
+                        "title": titles.get(url, ""),
+                        "file": f"{i}.txt",
+                        "type": "webpage",
+                    }
+                )
             except Exception:
                 failed_scrapes += 1
         else:
             failed_scrapes += 1
+
+    # Write SOURCES.md
+    write_sources(folder_name, sources)
 
     t2 = time.time()
     scrape_time = t2 - t1
@@ -234,10 +295,23 @@ async def search_pdfs(queries: list[str], folder_name: str, max_pdfs: int = 1) -
     print(f"\n📄 Found {len(pdf_urls)} PDF(s), downloading...")
 
     downloaded = 0
+    pdf_sources = []
     for i, url in enumerate(pdf_urls, 1):
         if await download_pdf(url, folder_name, i):
             downloaded += 1
+            pdf_sources.append(
+                {
+                    "url": url,
+                    "title": url.split("/")[-1],
+                    "file": f"{i}.pdf",
+                    "type": "pdf",
+                }
+            )
             print(f"  ✓ Downloaded: {url[:60]}...")
+
+    # Write PDF sources to SOURCES.md
+    if pdf_sources:
+        write_sources(folder_name, pdf_sources)
 
     print(f"✅ Downloaded {downloaded} PDF(s)\n")
     return downloaded
