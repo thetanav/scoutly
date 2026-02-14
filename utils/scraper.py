@@ -1,5 +1,4 @@
 import os
-import re
 import httpx
 import asyncio
 import trafilatura
@@ -9,6 +8,31 @@ import time
 from ddgs import DDGS
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; AI-scraper/1.0)"}
+
+
+async def download_pdf(url: str, folder_name: str, index: int) -> bool:
+    """Download a PDF file to the folder."""
+    try:
+        async with httpx.AsyncClient(
+            timeout=30,
+            follow_redirects=True,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            },
+        ) as session:
+            response = await session.get(url)
+            response.raise_for_status()
+
+            content_type = response.headers.get("content-type", "").lower()
+            if "pdf" not in content_type and not url.lower().endswith(".pdf"):
+                return False
+
+            filepath = os.path.join(folder_name, f"{index}.pdf")
+            with open(filepath, "wb") as f:
+                f.write(response.content)
+            return True
+    except Exception:
+        return False
 
 
 def extract_text(html: str) -> str:
@@ -78,9 +102,32 @@ async def scrape_urls(urls: list[str]) -> dict[str, Optional[str]]:
     return results
 
 
-async def use_scraper(search_results: list[dict], st: float) -> str:
-    """Scrape URLs and save to files with performance optimizations."""
-    folder_name = f"scraped/{uuid.uuid4().hex[:8]}"
+async def use_scraper(
+    search_results: list[dict],
+    st: float,
+    folder_name: str | None = None,
+    start_index: int | None = None,
+) -> tuple[str, int]:
+    """Scrape URLs and save to files with performance optimizations.
+
+    Args:
+        search_results: List of search result dicts with 'href' key
+        st: Search time for display
+        folder_name: Optional existing folder to append to (for incremental scraping)
+        start_index: Starting index for file naming (continues from previous if folder_name provided)
+
+    Returns:
+        tuple of (folder_name, next_available_index)
+    """
+    new_folder = folder_name is None
+
+    if folder_name is None:
+        folder_name = f"scraped/{uuid.uuid4().hex[:8]}"
+        start_index = 1
+    else:
+        existing = [f for f in os.listdir(folder_name) if f.endswith(".txt")]
+        start_index = len(existing) + 1
+
     os.makedirs(folder_name, exist_ok=True)
 
     urls = [result["href"] for result in search_results]
@@ -98,7 +145,7 @@ async def use_scraper(search_results: list[dict], st: float) -> str:
     successful_scrapes = 0
     failed_scrapes = 0
 
-    for i, (url, text) in enumerate(texts.items(), 1):
+    for i, (url, text) in enumerate(texts.items(), start_index):
         if text:
             successful_scrapes += 1
             filepath = os.path.join(folder_name, f"{i}.txt")
@@ -121,7 +168,8 @@ async def use_scraper(search_results: list[dict], st: float) -> str:
     print(f"  • Average per page: {avg_time:.2f}s")
     print(f"  • Speed: {len(urls) / scrape_time:.1f} pages/second\n")
 
-    return folder_name
+    next_index = start_index + successful_scrapes
+    return folder_name, next_index
 
 
 async def use_search(queries: list[str]) -> tuple[list[dict], float]:
@@ -146,3 +194,50 @@ async def use_search(queries: list[str]) -> tuple[list[dict], float]:
     ]
 
     return search_results, t2 - t1
+
+
+async def search_pdfs(queries: list[str], folder_name: str, max_pdfs: int = 1) -> int:
+    """Search for PDFs and download them.
+
+    Args:
+        queries: List of search queries with "filetype:pdf" appended
+        folder_name: Folder to save PDFs
+        max_pdfs: Maximum number of PDFs to download
+
+    Returns:
+        Number of PDFs downloaded
+    """
+    pdf_queries = [f"{q} filetype:pdf" for q in queries]
+
+    ddgs = DDGS()
+    pdf_urls = []
+
+    for query in pdf_queries:
+        try:
+            results = ddgs.text(query, max_results=3)
+            for r in results:
+                href = r.get("href", "")
+                if href.lower().endswith(".pdf") or "pdf" in href.lower():
+                    pdf_urls.append(href)
+                    if len(pdf_urls) >= max_pdfs:
+                        break
+        except Exception:
+            continue
+        if len(pdf_urls) >= max_pdfs:
+            break
+
+    pdf_urls = pdf_urls[:max_pdfs]
+
+    if not pdf_urls:
+        return 0
+
+    print(f"\n📄 Found {len(pdf_urls)} PDF(s), downloading...")
+
+    downloaded = 0
+    for i, url in enumerate(pdf_urls, 1):
+        if await download_pdf(url, folder_name, i):
+            downloaded += 1
+            print(f"  ✓ Downloaded: {url[:60]}...")
+
+    print(f"✅ Downloaded {downloaded} PDF(s)\n")
+    return downloaded

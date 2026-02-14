@@ -8,57 +8,103 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Initialize embeddings and LLM
 embeddings = OllamaEmbeddings(model="embeddinggemma")
-llm = OllamaLLM(model="gemma3:1b")
+llm = OllamaLLM(model="minimax-m2.5:cloud")
 
 
-async def extract_search_keywords(user_prompt: str) -> List[str]:
-    """Extract search keywords from user prompt using Gemma 3."""
+async def extract_search_keywords(user_prompt: str) -> dict:
+    """Extract search keywords from user prompt using A super great model.
 
-    prompt = f"""What are the main topics or subjects in this question that I should search for?
+    Returns:
+        dict with keys:
+            - keywords: list of search terms
+            - max_pages: int (how many pages to scrape initially)
+            - retry_keywords: list of additional keywords if first attempt fails
+    """
+
+    prompt = f"""Analyze this research question and provide search strategy.
 
 Question: "{user_prompt}"
 
-Return just the key search terms, separated by commas. For example:
-Question: "What are the health benefits of meditation?"
-Answer: meditation benefits, health benefits meditation, mindfulness benefits
+Respond in this exact format:
+KEYWORDS: <primary search terms, comma-separated, max 3>
+MAX_PAGES: <number 3-10, how many pages to scrape initially>
+RETRY_KEYWORDS: <alternative/different angles to search if first results insufficient, comma-separated, max 3>
 
-Question: "How does climate change affect polar bears?"
-Answer: climate change polar bears, polar bear habitat, global warming arctic"""
+Example for "What are the health benefits of meditation?":
+KEYWORDS: meditation benefits, health benefits meditation, mindfulness benefits
+MAX_PAGES: 5
+RETRY_KEYWORDS: meditation scientific studies, meditation mental health research, mindfulness meditation effects"""
 
     try:
         response = llm.invoke(prompt)
-        keywords_text = response.strip()
-        # Clean up and split
+        response_text = response.strip()
+
         keywords = []
-        for line in keywords_text.split("\n"):
-            if "," in line or "Answer:" in line:
-                # Extract the answer part
-                if "Answer:" in line:
-                    line = line.split("Answer:")[1].strip()
-                parts = [p.strip() for p in line.split(",") if p.strip()]
-                keywords.extend(parts)
-                break
+        max_pages = 5
+        retry_keywords = []
 
-        # If no keywords found, try the whole text
+        for line in response_text.split("\n"):
+            line = line.strip()
+            if line.startswith("KEYWORDS:"):
+                keywords = [
+                    k.strip()
+                    for k in line.split("KEYWORDS:")[1].strip().split(",")
+                    if k.strip()
+                ]
+            elif line.startswith("MAX_PAGES:"):
+                try:
+                    max_pages = int(line.split("MAX_PAGES:")[1].strip())
+                except:
+                    max_pages = 5
+            elif line.startswith("RETRY_KEYWORDS:"):
+                retry_keywords = [
+                    k.strip()
+                    for k in line.split("RETRY_KEYWORDS:")[1].strip().split(",")
+                    if k.strip()
+                ]
+
+        # Fallback if parsing failed
         if not keywords:
-            keywords = [k.strip() for k in keywords_text.split(",") if k.strip()]
+            words = user_prompt.lower().replace("?", "").split()
+            question_words = {
+                "what",
+                "how",
+                "why",
+                "when",
+                "where",
+                "who",
+                "which",
+                "did",
+                "was",
+                "were",
+                "has",
+                "have",
+                "does",
+                "do",
+                "is",
+                "are",
+                "the",
+                "a",
+                "an",
+                "and",
+                "or",
+                "but",
+                "with",
+                "about",
+            }
+            filtered = [w for w in words if w not in question_words and len(w) > 2]
+            keywords = [" ".join(filtered[:4])] if filtered else [user_prompt]
+            max_pages = 5
 
-        # Filter and clean
-        final_keywords = []
-        for k in keywords:
-            k = k.strip('"').strip("'")
-            if len(k) > 5 and not k.lower().startswith(("what", "how", "why")):
-                final_keywords.append(k)
+        return {
+            "keywords": keywords[:3],
+            "max_pages": max_pages,
+            "retry_keywords": retry_keywords[:3],
+        }
 
-        return (
-            final_keywords[:5]
-            if final_keywords
-            else [" ".join(user_prompt.split()[2:6])]
-        )  # Skip question word and get next words
-    except Exception:
-        # Simple fallback: remove question words and take key phrases
+    except Exception as e:
+        # Simple fallback
         words = user_prompt.lower().replace("?", "").split()
-        # Remove question words
         question_words = {
             "what",
             "how",
@@ -84,13 +130,81 @@ Answer: climate change polar bears, polar bear habitat, global warming arctic"""
             "but",
             "with",
             "about",
-            "happened",
         }
-        filtered_words = [w for w in words if w not in question_words and len(w) > 2]
-        if len(filtered_words) >= 5:
-            return [" ".join(filtered_words[:3]), " ".join(filtered_words)]
-        else:
-            return [" ".join(filtered_words)]
+        filtered = [w for w in words if w not in question_words and len(w) > 2]
+        return {
+            "keywords": [" ".join(filtered[:4])] if filtered else [user_prompt],
+            "max_pages": 5,
+            "retry_keywords": [],
+        }
+
+
+async def evaluate_sufficiency(user_prompt: str, context: str) -> dict:
+    """Evaluate if the scraped context is sufficient to answer the question.
+
+    Returns:
+        dict with keys:
+            - sufficient: bool
+            - reason: str (explanation)
+            - retry_keywords: list of additional search terms if insufficient
+            - retry_query: str (refined search query)
+    """
+    prompt = f"""You are a research assistant evaluating if you have enough information to answer a question.
+
+QUESTION: {user_prompt}
+
+CONTEXT AVAILABLE:
+{context[:2000]}
+
+Evaluate if this context is sufficient to give a comprehensive answer. Consider:
+- Do you have enough details to explain the topic?
+- Are there gaps in key information?
+- Is the information accurate and up-to-date?
+
+Respond in this exact format:
+SUFFICIENT: yes or no
+REASON: brief explanation (1-2 sentences)
+RETRY_KEYWORDS: if not sufficient, list 2-3 specific aspects that need more research (comma-separated)
+REFINED_QUERY: if not sufficient, a better search query to find missing information"""
+
+    try:
+        response = llm.invoke(prompt)
+        response_text = response.strip()
+
+        sufficient = False
+        reason = "Unable to evaluate"
+        retry_keywords = []
+        refined_query = ""
+
+        for line in response_text.split("\n"):
+            line = line.strip()
+            if line.startswith("SUFFICIENT:"):
+                sufficient = "yes" in line.lower().split("SUFFICIENT:")[1].strip()[:3]
+            elif line.startswith("REASON:"):
+                reason = line.split("REASON:")[1].strip()
+            elif line.startswith("RETRY_KEYWORDS:"):
+                retry_keywords = [
+                    k.strip()
+                    for k in line.split("RETRY_KEYWORDS:")[1].strip().split(",")
+                    if k.strip()
+                ]
+            elif line.startswith("REFINED_QUERY:"):
+                refined_query = line.split("REFINED_QUERY:")[1].strip()
+
+        return {
+            "sufficient": sufficient,
+            "reason": reason,
+            "retry_keywords": retry_keywords[:3],
+            "refined_query": refined_query,
+        }
+
+    except Exception as e:
+        return {
+            "sufficient": True,  # Assume sufficient on error to avoid infinite loop
+            "reason": f"Error evaluating: {str(e)}",
+            "retry_keywords": [],
+            "refined_query": "",
+        }
 
 
 async def ai_finder(folder_name: str, topic: str) -> FAISS:
