@@ -2,10 +2,14 @@ import os
 import httpx
 import asyncio
 import trafilatura
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 import uuid
 import time
 from ddgs import DDGS
+
+# Shared thread pool for CPU-bound work (trafilatura parsing, file I/O)
+_executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 4)
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; AI-scraper/1.0)"}
 
@@ -117,6 +121,7 @@ async def fetch_html(url: str, session: httpx.AsyncClient) -> tuple[str, Optiona
 async def scrape_urls(urls: list[str]) -> dict[str, Optional[str]]:
     """Fetch and parse multiple URLs concurrently with optimized settings."""
     results = {}
+    loop = asyncio.get_event_loop()
 
     # Configure client with optimal settings for scraping
     limits = httpx.Limits(
@@ -139,13 +144,18 @@ async def scrape_urls(urls: list[str]) -> dict[str, Optional[str]]:
         fetch_tasks = [fetch_with_limit(url) for url in urls]
         html_results = await asyncio.gather(*fetch_tasks)
 
-    # Parse HTML synchronously - selectolax is very fast, no need for thread pool
-    for url, html in html_results:
-        if html:
-            text = extract_text(html)
-            results[url] = text if text else None
-        else:
-            results[url] = None
+    # Parse HTML in parallel using thread pool (trafilatura is CPU-bound)
+    async def extract_async(url: str, html: Optional[str]) -> tuple[str, Optional[str]]:
+        if not html:
+            return url, None
+        text = await loop.run_in_executor(_executor, extract_text, html)
+        return url, text if text else None
+
+    extract_tasks = [extract_async(url, html) for url, html in html_results]
+    parsed_results = await asyncio.gather(*extract_tasks)
+
+    for url, text in parsed_results:
+        results[url] = text
 
     return results
 
@@ -167,12 +177,17 @@ async def use_scraper(
     Returns:
         tuple of (folder_name, next_available_index)
     """
+    loop = asyncio.get_event_loop()
 
     if folder_name is None:
         folder_name = f"scraped/{uuid.uuid4().hex[:8]}"
         start_index = 1
     else:
-        existing = [f for f in os.listdir(folder_name) if f.endswith(".txt")]
+        existing = [
+            f
+            for f in os.listdir(folder_name)
+            if f.endswith(".md") and f.startswith("RES_")
+        ]
         start_index = len(existing) + 1
 
     os.makedirs(folder_name, exist_ok=True)
@@ -189,30 +204,48 @@ async def use_scraper(
     print("⏳ Fetching and parsing pages...")
     texts = await scrape_urls(urls)
 
-    # Write files and track sources
+    # Write files in parallel using thread pool and track sources
     successful_scrapes = 0
     failed_scrapes = 0
     sources = []
 
+    def write_file(filepath: str, content: str) -> bool:
+        try:
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(content)
+            return True
+        except Exception:
+            return False
+
+    write_futures = []
+    file_metadata = []  # Track (url, index) for each write task
+
     for i, (url, text) in enumerate(texts.items(), start_index):
         if text:
-            successful_scrapes += 1
-            filepath = os.path.join(folder_name, f"{i}.txt")
-            try:
-                with open(filepath, "w", encoding="utf-8") as f:
-                    f.write(text)
+            filepath = os.path.join(folder_name, f"RES_{i}.md")
+            write_futures.append(
+                loop.run_in_executor(_executor, write_file, filepath, text)
+            )
+            file_metadata.append((url, i))
+        else:
+            failed_scrapes += 1
+
+    # Await all file writes concurrently
+    if write_futures:
+        write_results = await asyncio.gather(*write_futures)
+        for (url, idx), success in zip(file_metadata, write_results):
+            if success:
+                successful_scrapes += 1
                 sources.append(
                     {
                         "url": url,
                         "title": titles.get(url, ""),
-                        "file": f"{i}.txt",
+                        "file": f"RES_{idx}.md",
                         "type": "webpage",
                     }
                 )
-            except Exception:
+            else:
                 failed_scrapes += 1
-        else:
-            failed_scrapes += 1
 
     # Write SOURCES.md
     write_sources(folder_name, sources)
@@ -232,32 +265,84 @@ async def use_scraper(
     return folder_name, next_index
 
 
-async def use_search(queries: list[str]) -> tuple[list[dict], float]:
-    """Search using DuckDuckGo and return results as dicts."""
+async def use_search(
+    queries: list[str],
+    search_type: str = "general",
+    max_results_per_query: int = 5,
+) -> tuple[list[dict], float]:
+    """Search using DuckDuckGo with intelligent query optimization.
+
+    Args:
+        queries: List of search queries
+        search_type: Type of search (general, academic, news, comparison, how-to)
+        max_results_per_query: Number of results per query
+
+    Returns:
+        tuple of (list of result dicts, search time in seconds)
+    """
     ddgs = DDGS()
     t1 = time.time()
 
+    # Add search type modifiers to improve results
+    query_modifiers = {
+        "general": "",
+        "academic": " scholarly article",
+        "news": " latest news 2025",
+        "comparison": " vs comparison review",
+        "how-to": " guide tutorial",
+    }
+
+    # Expand queries with modifiers and variations
+    expanded_queries = []
+    for query in queries:
+        modifier = query_modifiers.get(search_type, "")
+        # Original query
+        expanded_queries.append(query)
+        # With modifier
+        if modifier:
+            expanded_queries.append(query + modifier)
+
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_queries = []
+    for q in expanded_queries:
+        if q.lower() not in seen:
+            seen.add(q.lower())
+            unique_queries.append(q)
+
     async def search_single(query: str) -> list:
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, lambda: ddgs.text(query, max_results=5))
+        return await loop.run_in_executor(
+            None, lambda: ddgs.text(query, max_results=max_results_per_query)
+        )
 
     # Run searches concurrently
-    results_lists = await asyncio.gather(*[search_single(q) for q in queries])
+    results_lists = await asyncio.gather(*[search_single(q) for q in unique_queries])
 
     t2 = time.time()
 
-    # Flatten and convert to dicts
-    all_results = [item for sublist in results_lists for item in sublist]
-    search_results = [
-        {"title": r["title"], "href": r["href"], "body": r.get("body")}
-        for r in all_results
-    ]
+    # Deduplicate results by URL
+    seen_urls = set()
+    unique_results = []
 
-    return search_results, t2 - t1
+    for sublist in results_lists:
+        for r in sublist:
+            url = r.get("href", "")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                unique_results.append(
+                    {
+                        "title": r.get("title", ""),
+                        "href": url,
+                        "body": r.get("body", ""),
+                    }
+                )
+
+    return unique_results, t2 - t1
 
 
 async def search_pdfs(queries: list[str], folder_name: str, max_pdfs: int = 1) -> int:
-    """Search for PDFs and download them.
+    """Search for PDFs and download them concurrently.
 
     Args:
         queries: List of search queries with "filetype:pdf" appended
@@ -268,21 +353,36 @@ async def search_pdfs(queries: list[str], folder_name: str, max_pdfs: int = 1) -
         Number of PDFs downloaded
     """
     pdf_queries = [f"{q} filetype:pdf" for q in queries]
+    loop = asyncio.get_event_loop()
 
+    # Search all queries in parallel using thread pool
     ddgs = DDGS()
-    pdf_urls = []
 
-    for query in pdf_queries:
+    async def search_single_pdf(query: str) -> list:
         try:
-            results = ddgs.text(query, max_results=3)
-            for r in results:
-                href = r.get("href", "")
-                if href.lower().endswith(".pdf") or "pdf" in href.lower():
-                    pdf_urls.append(href)
-                    if len(pdf_urls) >= max_pdfs:
-                        break
+            return await loop.run_in_executor(
+                _executor, lambda: ddgs.text(query, max_results=3)
+            )
         except Exception:
-            continue
+            return []
+
+    all_results = await asyncio.gather(*[search_single_pdf(q) for q in pdf_queries])
+
+    # Collect unique PDF URLs
+    pdf_urls = []
+    seen = set()
+    for results in all_results:
+        for r in results:
+            href = r.get("href", "")
+            if (
+                href
+                and href not in seen
+                and (href.lower().endswith(".pdf") or "pdf" in href.lower())
+            ):
+                seen.add(href)
+                pdf_urls.append(href)
+                if len(pdf_urls) >= max_pdfs:
+                    break
         if len(pdf_urls) >= max_pdfs:
             break
 
@@ -293,10 +393,16 @@ async def search_pdfs(queries: list[str], folder_name: str, max_pdfs: int = 1) -
 
     print(f"\n📄 Found {len(pdf_urls)} PDF(s), downloading...")
 
+    # Download all PDFs concurrently
+    download_tasks = [
+        download_pdf(url, folder_name, i) for i, url in enumerate(pdf_urls, 1)
+    ]
+    download_results = await asyncio.gather(*download_tasks)
+
     downloaded = 0
     pdf_sources = []
-    for i, url in enumerate(pdf_urls, 1):
-        if await download_pdf(url, folder_name, i):
+    for i, (url, success) in enumerate(zip(pdf_urls, download_results), 1):
+        if success:
             downloaded += 1
             pdf_sources.append(
                 {

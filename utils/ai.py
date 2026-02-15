@@ -16,28 +16,67 @@ llm = OllamaLLM(model=LLM_MODEL)
 
 
 async def extract_search_keywords(user_prompt: str) -> dict:
-    """Extract search keywords from user prompt using A super great model.
+    """Extract intelligent search keywords from user prompt.
+
+    Analyzes question type and generates optimized search strategy.
 
     Returns:
         dict with keys:
             - keywords: list of search terms
-            - max_pages: int (how many pages to scrape initially)
-            - retry_keywords: list of additional keywords if first attempt fails
+            - max_pages: int (how many pages to scrape)
+            - retry_keywords: list of alternative keywords
+            - search_type: str (general, academic, news, comparison)
+            - focus_areas: list of specific aspects to search for
     """
 
-    prompt = f"""Analyze this research question and provide search strategy.
+    # Detect question type for better keyword generation
+    question_lower = user_prompt.lower()
+    is_comparison = any(
+        word in question_lower
+        for word in ["vs", "versus", "compare", "difference", "better"]
+    )
+    is_howto = any(
+        word in question_lower
+        for word in ["how to", "how do", "guide", "tutorial", "steps"]
+    )
+    is_explanation = any(
+        word in question_lower for word in ["what is", "explain", "why does", "meaning"]
+    )
+    is_list = any(
+        word in question_lower for word in ["list", "top", "best", "examples", "ways"]
+    )
+    is_academic = any(
+        word in question_lower
+        for word in ["research", "study", "paper", "scientific", "evidence"]
+    )
+
+    # Build context-aware prompt
+    prompt = f"""You are a search strategy expert. Analyze this question and generate optimal search keywords.
 
 Question: "{user_prompt}"
 
-Respond in this exact format:
-KEYWORDS: <primary search terms, comma-separated, max 3>
-MAX_PAGES: <number 3-10, how many pages to scrape initially>
-RETRY_KEYWORDS: <alternative/different angles to search if first results insufficient, comma-separated, max 3>
+Question Analysis:
+- {"COMPARISON" if is_comparison else ""}
+- {"HOW-TO" if is_howto else ""}
+- {"EXPLANATION" if is_explanation else ""}
+- {"LIST/EXAMPLES" if is_list else ""}
+- {"ACADEMIC/RESEARCH" if is_academic else ""}
 
-Example for "What are the health benefits of meditation?":
-KEYWORDS: meditation benefits, health benefits meditation, mindfulness benefits
-MAX_PAGES: 5
-RETRY_KEYWORDS: meditation scientific studies, meditation mental health research, mindfulness meditation effects"""
+Respond in this exact format:
+KEYWORDS: <3-5 best search terms, comma-separated, most relevant first>
+MAX_PAGES: <number 5-15, more for complex questions>
+RETRY_KEYWORDS: <3 alternative angles if first results fail>
+SEARCH_TYPE: <general|academic|news|comparison|how-to>
+FOCUS_AREAS: <2-3 specific aspects to prioritize, comma-separated>
+
+Guidelines:
+- For comparisons: search both options + "vs" + "comparison"
+- For how-to: include "tutorial" + "guide" + specific steps
+- For explanations: include "definition" + "explained" + "examples"
+- For lists: include "top" + "best" + "examples"
+- For academic: include "research" + "study" + "data"
+- Always include the main topic as-is (no stemming)
+- Prioritize exact phrases in quotes for specific terms"""
 
     try:
         response = llm.invoke(prompt)
@@ -46,6 +85,8 @@ RETRY_KEYWORDS: meditation scientific studies, meditation mental health research
         keywords = []
         max_pages = 5
         retry_keywords = []
+        search_type = "general"
+        focus_areas = []
 
         for line in response_text.split("\n"):
             line = line.strip()
@@ -64,6 +105,14 @@ RETRY_KEYWORDS: meditation scientific studies, meditation mental health research
                 retry_keywords = [
                     k.strip()
                     for k in line.split("RETRY_KEYWORDS:")[1].strip().split(",")
+                    if k.strip()
+                ]
+            elif line.startswith("SEARCH_TYPE:"):
+                search_type = line.split("SEARCH_TYPE:")[1].strip().lower()
+            elif line.startswith("FOCUS_AREAS:"):
+                focus_areas = [
+                    k.strip()
+                    for k in line.split("FOCUS_AREAS:")[1].strip().split(",")
                     if k.strip()
                 ]
 
@@ -101,9 +150,11 @@ RETRY_KEYWORDS: meditation scientific studies, meditation mental health research
             max_pages = 5
 
         return {
-            "keywords": keywords[:3],
+            "keywords": keywords[:5],
             "max_pages": max_pages,
             "retry_keywords": retry_keywords[:3],
+            "search_type": search_type,
+            "focus_areas": focus_areas,
         }
 
     except Exception:
@@ -140,6 +191,8 @@ RETRY_KEYWORDS: meditation scientific studies, meditation mental health research
             "keywords": [" ".join(filtered[:4])] if filtered else [user_prompt],
             "max_pages": 5,
             "retry_keywords": [],
+            "search_type": "general",
+            "focus_areas": [],
         }
 
 
@@ -240,7 +293,7 @@ async def ai_finder(folder_name: str, topic: str = "") -> FAISS:
         filepath = os.path.join(folder_name, filename)
         source_url = source_map.get(filename, filename)
 
-        if filename.endswith(".txt"):
+        if filename.endswith(".md") and filename != "SOURCES.md":
             try:
                 with open(filepath, "r", encoding="utf-8") as f:
                     content = f.read()

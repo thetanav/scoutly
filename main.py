@@ -26,18 +26,28 @@ async def main():
     print("=" * 60 + "\n")
 
     print("🔍 Extracting search keywords...")
-    search_keywords = await extract_search_keywords(user_prompt)
-    print(f"📝 Using keywords: {', '.join(search_keywords)}")
+    search_strategy = await extract_search_keywords(user_prompt)
+    keywords = search_strategy["keywords"]
+    max_pages = search_strategy.get("max_pages", 5)
+    retry_keywords = search_strategy.get("retry_keywords", [])
+    search_type = search_strategy.get("search_type", "general")
+
+    print(f"📝 Primary keywords: {', '.join(keywords)}")
+    print(f"📝 Search type: {search_type}")
+    print(f"📝 Max pages to scrape: {max_pages}")
+    if retry_keywords:
+        print(f"📝 Retry keywords: {', '.join(retry_keywords)}")
 
     print("🌐 Searching for information...")
-    search_results, search_time = await use_search(search_keywords)
+    search_results, search_time = await use_search(keywords, search_type=search_type, max_results_per_query=8)
     print(f"⏱️  Search completed in {search_time:.2f}s")
+    print(f"📊 Found {len(search_results)} unique results")
 
     print("📄 Scraping content...")
-    folder_name = await use_scraper(search_results, search_time)
+    folder_name, _ = await use_scraper(search_results, search_time)
 
     # Use the keywords as topic for AI finder
-    topic = " ".join(search_keywords)
+    topic = " ".join(keywords)
     print("🧠 Processing documents and building knowledge base...")
     vectorstore = await ai_finder(folder_name, topic)
 

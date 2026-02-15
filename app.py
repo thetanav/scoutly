@@ -50,6 +50,7 @@ if prompt := st.chat_input("Enter your research question"):
                 keywords = search_strategy["keywords"]
                 max_pages = search_strategy.get("max_pages", 5)
                 retry_keywords = search_strategy.get("retry_keywords", [])
+                search_type = search_strategy.get("search_type", "general")
 
             st.info(
                 f"📊 Research plan: {len(keywords)} search topics, will scrape up to {max_pages} pages"
@@ -57,7 +58,9 @@ if prompt := st.chat_input("Enter your research question"):
 
             # Initial search
             with st.spinner("Searching for information..."):
-                search_results, search_time = asyncio.run(use_search(keywords))
+                search_results, search_time = asyncio.run(
+                    use_search(keywords, search_type=search_type, max_results_per_query=8)
+                )
 
             # Initial scrape
             with st.spinner("Scraping web pages..."):
@@ -100,7 +103,7 @@ if prompt := st.chat_input("Enter your research question"):
                 with st.spinner(
                     f"Searching for more information (round {iteration + 1})..."
                 ):
-                    more_results, _ = asyncio.run(use_search(additional_keywords[:2]))
+                    more_results, _ = asyncio.run(use_search(additional_keywords[:2], search_type=search_type, max_results_per_query=5))
 
                 # Scrape more
                 with st.spinner(
