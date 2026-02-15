@@ -1,5 +1,4 @@
 import os
-from typing import List
 
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
@@ -7,9 +6,13 @@ from langchain_ollama import OllamaEmbeddings, OllamaLLM
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
+# Centralized model configuration
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "embeddinggemma")
+LLM_MODEL = os.getenv("LLM_MODEL", "minimax-m2.5:cloud")
+
 # Initialize embeddings and LLM
-embeddings = OllamaEmbeddings(model="embeddinggemma")
-llm = OllamaLLM(model="minimax-m2.5:cloud")
+embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
+llm = OllamaLLM(model=LLM_MODEL)
 
 
 async def extract_search_keywords(user_prompt: str) -> dict:
@@ -55,7 +58,7 @@ RETRY_KEYWORDS: meditation scientific studies, meditation mental health research
             elif line.startswith("MAX_PAGES:"):
                 try:
                     max_pages = int(line.split("MAX_PAGES:")[1].strip())
-                except:
+                except ValueError:
                     max_pages = 5
             elif line.startswith("RETRY_KEYWORDS:"):
                 retry_keywords = [
@@ -103,7 +106,7 @@ RETRY_KEYWORDS: meditation scientific studies, meditation mental health research
             "retry_keywords": retry_keywords[:3],
         }
 
-    except Exception as e:
+    except Exception:
         # Simple fallback
         words = user_prompt.lower().replace("?", "").split()
         question_words = {
@@ -199,16 +202,16 @@ REFINED_QUERY: if not sufficient, a better search query to find missing informat
             "refined_query": refined_query,
         }
 
-    except Exception as e:
+    except Exception:
         return {
             "sufficient": True,  # Assume sufficient on error to avoid infinite loop
-            "reason": f"Error evaluating: {str(e)}",
+            "reason": "Error evaluating context",
             "retry_keywords": [],
             "refined_query": "",
         }
 
 
-async def ai_finder(folder_name: str, topic: str) -> FAISS:
+async def ai_finder(folder_name: str, topic: str = "") -> FAISS:
     """Process scraped text and PDFs, create embeddings, and build FAISS vector store."""
 
     all_documents = []
@@ -247,8 +250,8 @@ async def ai_finder(folder_name: str, topic: str) -> FAISS:
                         metadata={"source": source_url, "file": filename},
                     )
                     all_documents.append(doc)
-            except Exception as e:
-                print(f" ! Error processing {filename}: {e}")
+            except Exception:
+                print(f" ! Error processing {filename}")
                 continue
 
         elif filename.endswith(".pdf"):
@@ -265,8 +268,8 @@ async def ai_finder(folder_name: str, topic: str) -> FAISS:
                         metadata={"source": source_url, "file": filename},
                     )
                     all_documents.append(doc)
-            except Exception as e:
-                print(f" ! Error processing PDF {filename}: {e}")
+            except Exception:
+                print(f" ! Error processing PDF {filename}")
                 continue
 
     if not all_documents:
@@ -324,8 +327,8 @@ async def ai_main(vectorstore: FAISS, user_prompt: str) -> tuple[str, list[str]]
     try:
         response = llm.invoke(full_prompt)
         return response, sources
-    except Exception as e:
-        return f"RAG failed: {str(e)}", []
+    except Exception:
+        return "RAG failed", []
 
 
 def ai_stream_response(vectorstore: FAISS, user_prompt: str):
@@ -371,5 +374,5 @@ def ai_stream_response(vectorstore: FAISS, user_prompt: str):
             else:
                 yield f"{i}. {src}\n"
 
-    except Exception as e:
-        yield f"RAG failed: {str(e)}"
+    except Exception:
+        yield "RAG failed"

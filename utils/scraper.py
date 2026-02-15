@@ -167,7 +167,6 @@ async def use_scraper(
     Returns:
         tuple of (folder_name, next_available_index)
     """
-    new_folder = folder_name is None
 
     if folder_name is None:
         folder_name = f"scraped/{uuid.uuid4().hex[:8]}"
@@ -222,7 +221,7 @@ async def use_scraper(
     scrape_time = t2 - t1
     avg_time = scrape_time / len(urls) if urls else 0
 
-    print(f"\n✅ Scraping Performance:")
+    print("\n✅ Scraping Performance:")
     print(f"  • Successfully processed: {successful_scrapes}/{len(urls)} pages")
     print(f"  • Failed/Empty: {failed_scrapes}/{len(urls)} pages")
     print(f"  • Total time: {scrape_time:.2f}s")
